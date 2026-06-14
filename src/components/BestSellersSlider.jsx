@@ -292,7 +292,7 @@ const ProductCard = ({ product }) => {
 
       {/* CTA */}
       <div className="bs-cta">
-        <span className="bs-price">₹{price * 40}</span>
+        <span className="bs-price">₹{price * 1}</span>
         <button className="bs-btn" onClick={handleAdd} style={{ "--accent-color": accent }}>
           <span>{"View Details"}</span>
         </button>
