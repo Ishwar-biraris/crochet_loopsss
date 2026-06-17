@@ -1,17 +1,29 @@
 import React, { useRef, useState } from 'react';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Hero from './components/Hero.jsx';
 import Navbar from './components/Navbar.jsx';
 import BestSellersSlider from './components/BestSellersSlider.jsx';
 import CrochettiShopPage from './components/Crochettishoppage.jsx';
 import Instagramsection from './components/Instagramsection.jsx';
 import CrochetlyFooter from './components/CrochetlyFooter.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 
-const App = () => {
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/*" element={<MainApp />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+function MainApp() {
   const heroRef        = useRef(null);
   const bestSellersRef = useRef(null);
   const shopRef        = useRef(null);
 
-  // Shared filter state — controlled by footer, consumed by shop page
   const [shopFilter, setShopFilter] = useState({ category: 'all', sort: 'default' });
 
   const handleNav = (item) => {
@@ -22,7 +34,6 @@ const App = () => {
 
   const handleFooterFilter = ({ category, sort }) => {
     setShopFilter({ category, sort });
-    // Scroll to shop section after a short delay so state updates first
     setTimeout(() => {
       shopRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
@@ -47,6 +58,4 @@ const App = () => {
       <CrochetlyFooter onFilter={handleFooterFilter} activeFilter={shopFilter} />
     </div>
   );
-};
-
-export default App;
+}

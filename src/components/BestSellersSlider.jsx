@@ -1,19 +1,20 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, Pagination, A11y, Autoplay } from "swiper/modules";
-import { PRODUCTS } from "../data/products";
-
+import { db } from "../firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import { useCategories } from "../hooks/useCategories";
 
 /* ─── Styles ─────────────────────────────────────────── */
 const swiperCSS = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
   @import url('https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css');
 
-@font-face {
-  font-family: 'cherry';
-  src: url('./fonts/Montserrat/Montserrat-VariableFont_wght.woff2') format('woff2');
-  font-display: swap;
-}
+  @font-face {
+    font-family: 'cherry';
+    src: url('./fonts/Montserrat/Montserrat-VariableFont_wght.woff2') format('woff2');
+    font-display: swap;
+  }
 
   :root {
     --cream:    #faf6f0;
@@ -36,7 +37,6 @@ const swiperCSS = `
     overflow: hidden;
   }
 
-  /* ── Header ── */
   .bs-header {
     text-align: center;
     padding: 0 24px 48px;
@@ -62,33 +62,19 @@ const swiperCSS = `
     border-radius: 2px;
   }
 
-  /* ── Swiper overrides ── */
-  .bs-swiper {
-    padding: 16px 40px 64px !important;
-  }
-  .bs-swiper .swiper-slide {
-    height: auto;
-  }
+  .bs-swiper { padding: 16px 40px 64px !important; }
+  .bs-swiper .swiper-slide { height: auto; }
 
-  /* ── Card ── */
   .bs-card {
-    // background: var(--card-bg);
-    // border-radius: 12px;
     display: flex;
     flex-direction: column;
     height: 540px;
-    // max-height: 700px;
     position: relative;
     cursor: pointer;
-    transition: transform .4s cubic-bezier(.25,.8,.25,1),
-                box-shadow .4s cubic-bezier(.25,.8,.25,1);
+    transition: transform .4s cubic-bezier(.25,.8,.25,1);
     overflow: hidden;
-    // border: 1px solid rgba(42,31,20,.07);
   }
-  .bs-card:hover {
-    transform: translateY(-8px);
-    // box-shadow: 0 24px 48px rgba(42,31,20,.13);
-  }
+  .bs-card:hover { transform: translateY(-8px); }
   .bs-card::before {
     content: '';
     position: absolute;
@@ -103,7 +89,6 @@ const swiperCSS = `
   }
   .bs-card:hover::before { transform: scaleX(1); }
 
-  /* ── Badge ── */
   .bs-badge {
     position: absolute;
     top: 12px; right: 12px;
@@ -118,12 +103,15 @@ const swiperCSS = `
     backdrop-filter: blur(4px);
   }
 
-  /* ── Image ── */
   .bs-visual {
     flex: 1;
     overflow: hidden;
     position: relative;
     border-radius: 30px;
+    background: #f0ebe2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .bs-img {
     width: 100%;
@@ -132,11 +120,12 @@ const swiperCSS = `
     transition: transform .6s cubic-bezier(.25,.8,.25,1);
     display: block;
   }
-  .bs-card:hover .bs-img {
-    transform: scale(1.06);
+  .bs-card:hover .bs-img { transform: scale(1.06); }
+  .bs-no-img {
+    font-size: 80px;
+    line-height: 1;
   }
 
-  /* ── Text block ── */
   .bs-text {
     padding: 14px 16px 4px;
     flex: 0 0 auto;
@@ -151,7 +140,6 @@ const swiperCSS = `
     margin-bottom: 3px;
   }
   .bs-name {
-    font-family: 'Playfair Display', serif;
     font-family: 'cherry';
     font-size: 1.15rem;
     letter-spacing: .01em;
@@ -159,7 +147,6 @@ const swiperCSS = `
     line-height: 1.2;
   }
 
-  /* ── CTA ── */
   .bs-cta {
     padding: 5px 16px 16px;
     display: flex;
@@ -168,10 +155,9 @@ const swiperCSS = `
     gap: 10px;
   }
   .bs-price {
-    font-family: 'Playfair Display', serif;
+    font-family: 'cherry';
     font-size: 1rem;
     color: var(--dark);
-    font-family: 'cherry';
   }
   .bs-btn {
     background: var(--dark);
@@ -185,17 +171,13 @@ const swiperCSS = `
     text-transform: uppercase;
     cursor: pointer;
     border-radius: 20px;
-    position: relative;
-    overflow: hidden;
     transition: background .3s ease, transform .2s ease;
   }
   .bs-btn:hover {
     background: var(--accent-color, var(--yarn-1));
     transform: scale(1.04);
   }
-  .bs-btn span { position: relative; z-index: 1; }
 
-  /* ── Nav ── */
   .bs-nav-prev, .bs-nav-next {
     position: absolute;
     top: 50%; transform: translateY(-50%);
@@ -219,7 +201,6 @@ const swiperCSS = `
     border-color: transparent;
   }
 
-  /* ── Pagination ── */
   .bs-swiper .swiper-pagination-bullet {
     background: var(--muted);
     opacity: .35;
@@ -233,7 +214,6 @@ const swiperCSS = `
     border-radius: 4px;
   }
 
-  /* ── Slide fade-in ── */
   .bs-swiper .swiper-slide {
     opacity: 0;
     transform: translateY(18px);
@@ -244,12 +224,21 @@ const swiperCSS = `
     transform: translateY(0);
   }
 
+  .bs-loading {
+    text-align: center;
+    padding: 60px 24px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .82rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
   @media (max-width: 600px) {
     .bs-swiper { padding: 12px 12px 56px !important; }
     .bs-card { height: 500px; }
   }
 `;
-
 /* ─── Arrow Icons ──────────────────────────────────── */
 const ChevronLeft = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -263,38 +252,38 @@ const ChevronRight = () => (
 );
 
 /* ─── Card Component ───────────────────────────────── */
-const ProductCard = ({ product }) => {
-  const { desc, name, price, accent, badge, image } = product;
-  const [added, setAdded] = useState(false);
-
-  const handleAdd = (e) => {
-    e.stopPropagation();
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1800);
-  };
+const ProductCard = ({ product, CAT_ACCENT }) => {
+  const { desc, name, price, category, badge, imageUrl } = product;
+  const accentColor = CAT_ACCENT[category] || "#c05080";
 
   return (
-    <div className="bs-card" style={{ "--accent-color": accent }}>
+    <div className="bs-card" style={{ "--accent-color": accentColor }}>
       {badge && (
-        <div className="bs-badge" style={{ background: accent }}>{badge}</div>
+        <div className="bs-badge" style={{ background: accentColor }}>{badge}</div>
       )}
 
-      {/* Product Image */}
       <div className="bs-visual">
-        <img src={image} alt={name} className="bs-img" />
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            className="bs-img"
+            onError={e => { e.target.style.display = "none"; }}
+          />
+        ) : (
+          <div className="bs-no-img">🧶</div>
+        )}
       </div>
 
-      {/* Text */}
       <div className="bs-text">
         <p className="bs-subtitle">{desc}</p>
         <h3 className="bs-name">{name}</h3>
       </div>
 
-      {/* CTA */}
       <div className="bs-cta">
-        <span className="bs-price">₹{price * 1}</span>
-        <button className="bs-btn" onClick={handleAdd} style={{ "--accent-color": accent }}>
-          <span>{"View Details"}</span>
+        <span className="bs-price">₹{price}</span>
+        <button className="bs-btn" style={{ "--accent-color": accentColor }}>
+          <span>View Details</span>
         </button>
       </div>
     </div>
@@ -305,71 +294,89 @@ const ProductCard = ({ product }) => {
 export default function BestSellersSlider() {
   const prevRef = useRef(null);
   const nextRef = useRef(null);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  const { categories } = useCategories();
+  const CAT_ACCENT = Object.fromEntries(categories.map(c => [c.key, c.accent]));
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "products"), (snap) => {
+      const bestSellers = snap.docs
+        .map(d => ({ firestoreId: d.id, ...d.data() }))
+        .filter(p => p.badge === "BEST SELLER" && p.visible !== false);
+      setProducts(bestSellers);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
 
   return (
     <>
       <style>{swiperCSS}</style>
 
       <section className="bs-root">
-        {/* Header */}
         <div className="bs-header">
           <h2 className="bs-title">Our Best Sellers</h2>
           <p className="bs-tagline">Handcrafted with love · One stitch at a time</p>
           <div className="bs-line" />
         </div>
 
-        {/* Slider */}
-        <div style={{ position: "relative" }}>
-          <button ref={prevRef} className="bs-nav-prev" aria-label="Previous">
-            <ChevronLeft />
-          </button>
-          <button ref={nextRef} className="bs-nav-next" aria-label="Next">
-            <ChevronRight />
-          </button>
+        {loading ? (
+          <div className="bs-loading">Loading...</div>
+        ) : (
+          <div style={{ position: "relative" }}>
+            <button ref={prevRef} className="bs-nav-prev" aria-label="Previous">
+              <ChevronLeft />
+            </button>
+            <button ref={nextRef} className="bs-nav-next" aria-label="Next">
+              <ChevronRight />
+            </button>
 
-          <Swiper
-            className="bs-swiper"
-            modules={[Navigation, Pagination, A11y, Autoplay]}
-            loop={true}
-            grabCursor={true}
-            watchSlidesProgress={true}
-            autoplay={{ delay: 3500, disableOnInteraction: true, pauseOnMouseEnter: true }}
-            navigation={{ prevEl: prevRef.current, nextEl: nextRef.current }}
-            onBeforeInit={(swiper) => {
-              swiper.params.navigation.prevEl = prevRef.current;
-              swiper.params.navigation.nextEl = nextRef.current;
-            }}
-            pagination={{ clickable: true }}
-            breakpoints={{
-              0:    { slidesPerView: 1.2, spaceBetween: 16 },
-              480:  { slidesPerView: 1.6, spaceBetween: 20 },
-              680:  { slidesPerView: 2.2, spaceBetween: 24 },
-              900:  { slidesPerView: 3,   spaceBetween: 28 },
-              1100: { slidesPerView: 3.5, spaceBetween: 32 },
-            }}
-            onProgress={(swiper) => {
-              swiper.slides.forEach((slide) => {
-                const progress = Math.abs(slide.progress ?? 0);
-                if (progress < swiper.params.slidesPerView) {
+            <Swiper
+              className="bs-swiper"
+              modules={[Navigation, Pagination, A11y, Autoplay]}
+              loop={products.length > 3}
+              grabCursor={true}
+              watchSlidesProgress={true}
+              autoplay={{ delay: 3500, disableOnInteraction: true, pauseOnMouseEnter: true }}
+              navigation={{ prevEl: prevRef.current, nextEl: nextRef.current }}
+              onBeforeInit={(swiper) => {
+                swiper.params.navigation.prevEl = prevRef.current;
+                swiper.params.navigation.nextEl = nextRef.current;
+              }}
+              pagination={{ clickable: true }}
+              breakpoints={{
+                0:    { slidesPerView: 1.2, spaceBetween: 16 },
+                480:  { slidesPerView: 1.6, spaceBetween: 20 },
+                680:  { slidesPerView: 2.2, spaceBetween: 24 },
+                900:  { slidesPerView: 3,   spaceBetween: 28 },
+                1100: { slidesPerView: 3.5, spaceBetween: 32 },
+              }}
+              onProgress={(swiper) => {
+                swiper.slides.forEach((slide) => {
+                  const progress = Math.abs(slide.progress ?? 0);
+                  if (progress < swiper.params.slidesPerView) {
+                    slide.classList.add("swiper-slide-visible");
+                  } else {
+                    slide.classList.remove("swiper-slide-visible");
+                  }
+                });
+              }}
+              onInit={(swiper) => {
+                swiper.slides.forEach((slide) => {
                   slide.classList.add("swiper-slide-visible");
-                } else {
-                  slide.classList.remove("swiper-slide-visible");
-                }
-              });
-            }}
-            onInit={(swiper) => {
-              swiper.slides.forEach((slide) => {
-                slide.classList.add("swiper-slide-visible");
-              });
-            }}
-          >
-            {PRODUCTS.filter(p => p.badge === "BEST SELLER").map((product) => (
-  <SwiperSlide key={product.id}>
-    <ProductCard product={product} />
-  </SwiperSlide>
-))}
-          </Swiper>
-        </div>
+                });
+              }}
+            >
+              {products.map((product) => (
+                <SwiperSlide key={product.firestoreId}>
+                  <ProductCard product={product} CAT_ACCENT={CAT_ACCENT} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </div>
+        )}
       </section>
     </>
   );
